@@ -173,7 +173,7 @@
     </div>
 
     <audio id="bgm" loop>
-        <source src="../src/happy-birthday-155461.mp3" type="audio/mpeg">
+        <source src="./src/happy-birthday-155461.mp3" type="audio/mpeg">
     </audio>
 
     <video class="input_video" playsinline></video>
@@ -230,6 +230,8 @@
                 <h2 id="instruction-text" class="text-6xl md:text-8xl font-bold text-white neon-pulse transition-all duration-700">举起双手</h2>
             </div>
             <p id="sub-instruction" class="mt-4 text-xl md:text-2xl text-pink-200/80 font-light tracking-[0.3em]">让魔法发生</p>
+            <!-- 自动倒数提示文字 -->
+            <p id="auto-countdown-text" class="mt-4 text-sm text-pink-200/60 font-light tracking-wider animate-pulse hidden"></p>
         </div>
 
         <!-- 摄像头预览框 -->
@@ -261,7 +263,7 @@
                 <div class="flip-card-front glass-panel bg-gradient-to-br from-pink-500/40 to-purple-600/40 border border-white/30 p-1">
                     <div class="bg-black/80 rounded-[1rem] p-6 h-full flex flex-col backdrop-blur-md">
                         <div class="w-full aspect-[4/3] bg-gray-800 rounded-lg mb-6 overflow-hidden relative border border-white/10 shadow-inner">
-                            <img src="../src/1.jpg" class="w-full h-full object-cover" alt="Gift">
+                            <img src="./src/1.jpg" class="w-full h-full object-cover" alt="Gift">
                             <div class="absolute bottom-3 left-4 text-white/90 font-handwriting text-2xl">Happy Birthday!</div>
                         </div>
                         <div class="text-center mt-auto mb-8">
@@ -341,6 +343,10 @@
         let previousMouseX = 0;
         let lastHandX = 0;
         let autoRotateSpeed = 0.005;
+
+        // --- 自动倒数变量 ---
+        let autoEntryTimer = null;
+        let autoEntrySeconds = 15;
         
         let audioContext, analyser;
         const bgm = document.getElementById('bgm');
@@ -374,7 +380,9 @@
             page2: document.getElementById('card-page-2'),
             toPage2Btn: document.getElementById('to-page-2-btn'),
             textContainer1: document.getElementById('typewriter-text-1'),
-            textContainer2: document.getElementById('typewriter-text-2')
+            textContainer2: document.getElementById('typewriter-text-2'),
+            // 自动倒数文本
+            autoCountdownText: document.getElementById('auto-countdown-text')
         };
 
         // 立即初始化 Three.js
@@ -670,6 +678,14 @@
 
         function startSequence() {
             if (currentState !== STATE.IDLE || transitionLock) return;
+                        
+            // 清除自动倒数计时器
+            if (autoEntryTimer) {
+                clearInterval(autoEntryTimer);
+                autoEntryTimer = null;
+            }
+            ui.autoCountdownText.classList.add('hidden');
+
             log('检测到手势，开始倒计时序列');
             transitionLock = true;
             currentState = STATE.COUNTDOWN;
@@ -847,6 +863,33 @@
             ui.topBanner.classList.remove('hidden');
         });
 
+        
+        // --- 自动倒数功能 ---
+        function startAutoEntryCountdown() {
+            autoEntrySeconds = 10;
+            ui.autoCountdownText.classList.remove('hidden');
+            ui.autoCountdownText.innerText = `若未检测到手势，${autoEntrySeconds}秒后自动开始...`;
+            
+            // 清除旧的计时器（如果存在）
+            if (autoEntryTimer) clearInterval(autoEntryTimer);
+
+            autoEntryTimer = setInterval(() => {
+                autoEntrySeconds--;
+                if (autoEntrySeconds > 0) {
+                    ui.autoCountdownText.innerText = `若未检测到手势，${autoEntrySeconds}秒后自动开始...`;
+                } else {
+                    clearInterval(autoEntryTimer);
+                    autoEntryTimer = null;
+                    ui.autoCountdownText.classList.add('hidden');
+                    // 只有在还是 IDLE 状态时才自动开始，防止用户刚好在此时触发了手势
+                    if (currentState === STATE.IDLE) {
+                        log('自动倒数结束，触发开始序列');
+                        startSequence();
+                    }
+                }
+            }, 1000);
+        }
+
         // 按钮点击事件处理
         ui.startBtn.addEventListener('click', async function() {
             log('点击了进入按钮...');
@@ -882,6 +925,9 @@
             currentState = STATE.IDLE;
             ui.startOverlay.classList.add('hidden');
             ui.uiLayer.style.display = 'flex';
+
+            // 启动自动倒数
+            startAutoEntryCountdown();
         });
 
         async function initAudio() {
@@ -923,7 +969,7 @@
             }
             if (volume > VISUAL_CONFIG.blowThreshold || isSpacePressed || isTouching) {
                 isBlowing = true;
-                blowProgress += 0.5; 
+                blowProgress += 0.8; 
             } else {
                 isBlowing = false;
                 blowProgress -= 0.3; 
@@ -1004,15 +1050,9 @@
                      }
                 }
             });
-            
+
             const camera = new Camera(video, { 
-                onFrame: async () => { 
-                    frameCount++;
-                    // 智能降频：每 3 帧处理一次，相当于 20FPS，既流畅又不卡顿
-                    if (frameCount % 3 === 0) {
-                        await hands.send({image: video}); 
-                    }
-                }, 
+                onFrame: async () => { await hands.send({image: video}); }, 
                 width: 320, 
                 height: 240 
             });

@@ -1004,7 +1004,7 @@
                      }
                 }
             });
-            
+
             const camera = new Camera(video, { 
                 onFrame: async () => { 
                     frameCount++;
@@ -1016,9 +1016,6 @@
                 width: 320, 
                 height: 240 
             });
-            
-            return camera.start();
-        }
 
         function render() {
             requestAnimationFrame(render);
